@@ -1,6 +1,6 @@
 <?php
 
-// Usage: php script.php <sitemap_url_or_host>
+// Usage: php sitemap.php <sitemap_url_or_host> [--output=slugs|words]
 
 class SitemapParser {
     private $processedUrls = [];
@@ -125,13 +125,10 @@ class SitemapParser {
                 $link = (string) $item->link;
                 $keywords[] = $this->urlToKeyword($link);
             }
-        } else {
-            //echo "No valid <item> elements found in RSS feed: $rssUrl\n";
         }
 
         return $keywords;
     }
-
 }
 
 class RobotsTxtChecker {
@@ -219,7 +216,7 @@ class SitemapKeywordGenerator {
         $this->parser = new SitemapParser();
     }
 
-    public function generateKeywords(string $urlOrHost): void {
+    public function generateKeywords(string $urlOrHost, string $outputType = 'slugs'): void {
         $sitemapUrl = strpos($urlOrHost, '/sitemap') === false ? $this->discoverSitemap($urlOrHost) : $urlOrHost;
         if (!$sitemapUrl) {
             echo "No sitemap found for $urlOrHost\n";
@@ -233,19 +230,49 @@ class SitemapKeywordGenerator {
 
         $keywords = array_filter($this->parser->processSitemap($sitemapUrl)); // Filter out empty keywords
 
-        foreach ($keywords as $keyword) {
-            echo "$keyword\n";
-        }
-
         $rssUrl = $this->discoverRss($urlOrHost);
         if ($rssUrl) {
             $rssKeywords = array_filter($this->parser->processRss($rssUrl)); // Filter out empty RSS keywords
-            foreach (array_unique($rssKeywords) as $keyword) {
+            $keywords = array_merge($keywords, $rssKeywords);
+        }
+
+        if ($outputType === 'words') {
+            $this->outputWords($keywords);
+        } else {
+            $this->outputSlugs($keywords);
+        }
+    }
+
+    private function outputSlugs(array $keywords): void {
+        foreach (array_unique($keywords) as $keyword) {
+            if (!empty($keyword)) { // Prevent empty output
                 echo "$keyword\n";
             }
         }
     }
 
+    private function outputWords(array $keywords): void {
+        $stopWords = ['the', 'and', 'of', 'if', 'to', 'a', 'in', 'on', 'for', 'with', 'by', 'is', 'it', 'or'];
+        $wordCounts = [];
+
+        foreach ($keywords as $keyword) {
+            // Split words on non-alphabetic characters
+            $words = array_filter(preg_split('/[^a-zA-Z]+/', $keyword), function ($word) use ($stopWords) {
+                $word = strtolower(trim($word));
+                return !empty($word) && !in_array($word, $stopWords);
+            });
+
+            foreach ($words as $word) {
+                $wordCounts[$word] = ($wordCounts[$word] ?? 0) + 1;
+            }
+        }
+
+        arsort($wordCounts);
+
+        foreach ($wordCounts as $word => $count) {
+            echo "$count,$word\n";
+        }
+    }
 
     private function discoverSitemap(string $urlOrHost): ?string {
         $parsed = parse_url($urlOrHost);
@@ -289,9 +316,12 @@ class SitemapKeywordGenerator {
 
 // Entry point
 $urlOrHost = $argv[1] ?? '';
+$outputType = $argv[2] ?? '--output=slugs';
+$outputType = str_replace('--output=', '', $outputType);
+
 if (!$urlOrHost) {
-    die("Usage: php sitemap.php <sitemap_url_or_host>\n");
+    die("Usage: php sitemap.php <sitemap_url_or_host> [--output=slugs|words]\n");
 }
 
 $generator = new SitemapKeywordGenerator();
-$generator->generateKeywords($urlOrHost);
+$generator->generateKeywords($urlOrHost, $outputType);
