@@ -217,6 +217,11 @@ class SitemapKeywordGenerator {
     }
 
     public function generateKeywords(string $urlOrHost, string $outputType = 'slugs'): void {
+        // Ensure the URL has a scheme, defaulting to https:// if none is provided
+        if (!parse_url($urlOrHost, PHP_URL_SCHEME)) {
+            $urlOrHost = 'https://' . ltrim($urlOrHost, '/');
+        }
+
         $sitemapUrl = strpos($urlOrHost, '/sitemap') === false ? $this->discoverSitemap($urlOrHost) : $urlOrHost;
         if (!$sitemapUrl) {
             echo "No sitemap found for $urlOrHost\n";
